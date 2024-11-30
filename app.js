@@ -65,10 +65,9 @@ document.addEventListener('DOMContentLoaded', () => {
     element.addEventListener('dblclick', (e) => {
       if (e.target.classList.contains('verse-box')) {
         const verseText = e.target.innerText;
-        // Split the text by the first two newlines or the last occurrence of newline to ensure it captures the verse text and reference correctly
-        const parts = verseText.split(/\n\n|\n(?!\d)/); // Split on two newlines or a single newline followed by non-digit
-        const text = parts.slice(0, -1).join('\n'); // Join all parts except the last one (verse reference)
-        const reference = parts.slice(-1)[0]; // The last part is the verse reference
+        const parts = verseText.split(/\n\n|\n(?!\d)/);
+        const text = parts.slice(0, -1).join('\n');
+        const reference = parts.slice(-1)[0];
 
         const formattedText = `${text}\n— ${reference.trim()}`;
 
@@ -88,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
     touchStartTime = new Date().getTime();
     touchTimer = setTimeout(() => {
       handleSingleClick(e.target);
-    }, 500); // Long press duration
+    }, 500);
   }
 
   function handleTouchEnd(e) {
@@ -97,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const endY = e.changedTouches[0].clientY;
     const diffX = endX - startX;
     const diffY = endY - startY;
-    if (Math.abs(diffX) > Math.abs(diffY) && diffX < -50) { // Left swipe
+    if (Math.abs(diffX) > Math.abs(diffY) && diffX < -50) {
       const target = e.target;
       if (target.classList.contains('verse-box')) {
         const bookId = target.dataset.bookId;
@@ -164,28 +163,24 @@ document.addEventListener('DOMContentLoaded', () => {
       verseBox.dataset.chapter = chapter;
       verseBox.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        toggleChapters(bookId); // Go back to the list of chapters
+        toggleChapters(bookId);
       });
       addTouchListeners(verseBox);
       booksContainer.appendChild(verseBox);
 
-      // Apply highlighting to the target verse
       if (targetVerseNumber && parseInt(verseNumber) === parseInt(targetVerseNumber)) {
-        // Wait for the DOM update before scrolling
         setTimeout(() => {
-          // Scroll the verse to the top of the window
           const verseBoxRect = verseBox.getBoundingClientRect();
           const scrollTop = window.scrollY || window.pageYOffset;
-          const offsetTop = verseBoxRect.top + scrollTop - 20; // Adjust the offset (20px) if needed
+          const offsetTop = verseBoxRect.top + scrollTop - 20;
           window.scrollTo({ top: offsetTop, behavior: 'smooth' });
 
-          // Highlight text
           const highlightSpan = document.createElement('span');
-          highlightSpan.className = 'highlight'; // Use the same CSS class for consistency
+          highlightSpan.className = 'highlight';
           highlightSpan.textContent = verse.field[4];
           const verseBoxContent = verseBox.innerHTML.split('<br>')[1];
           verseBox.innerHTML = `${highlightSpan.outerHTML}<br>${verseBoxContent}`;
-        }, 100); // Small delay to ensure the element is rendered before scrolling
+        }, 100);
       }
     });
   }
@@ -195,10 +190,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function searchHandler() {
-    const searchTerm = searchInput.value.toLowerCase();
+    const searchTerm = searchInput.value.toLowerCase().trim();
 
-    if (searchTerm.length < 4) {
-      // Display message if search term is less than 4 characters
+    if (searchTerm.length < 4 && !searchTerm.includes('*') && !searchTerm.includes('?')) {
       booksContainer.innerHTML = '';
       resultCount.textContent = 'Type in at least 4 letters to begin search.';
       return;
@@ -206,31 +200,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
     booksContainer.innerHTML = '';
 
+    // Allow wildcard support by converting * and ? into regular expressions
+    const regexSearchTerm = buildSearchPattern(searchTerm);
+
+    const maxResults = 100;
     setTimeout(() => {
-      const results = bibleData.filter(verse => verse.field[4].toLowerCase().includes(searchTerm));
-      const highlightTerm = new RegExp(`(${searchTerm})`, 'gi');
+      const results = bibleData.filter(verse => {
+        return new RegExp(regexSearchTerm, 'i').test(verse.field[4]);
+      });
 
-      // Update result count
-      resultCount.textContent = `Results: ${results.length}`;
+      const limitedResults = results.slice(0, maxResults);
+      resultCount.textContent = `Results: ${limitedResults.length}`;
 
-      results.forEach(result => {
+      if (limitedResults.length === 0) {
+        resultCount.textContent = 'No results found.';
+      }
+
+      limitedResults.forEach(result => {
         const bookId = result.field[1];
         const bookName = bookNames[bookId];
         const chapter = result.field[2];
         const verseNumber = result.field[3];
-        const verseText = result.field[4].replace(highlightTerm, '<span class="highlight">$1</span>');
+        const verseText = result.field[4].replace(new RegExp(`(${regexSearchTerm})`, 'gi'), '<span class="highlight">$1</span>');
         const fullText = `${verseText}<br>${bookName} ${chapter}:${verseNumber}`;
         const resultBox = createBoxElement(fullText);
         resultBox.classList.add('result-box');
         resultBox.addEventListener('click', () => {
           toggleChapters(bookId);
           toggleVerses(bookId, chapter, verseNumber);
-          searchInput.value = ''; // Clear the search box
-          resultCount.textContent = ''; // Clear the result count text
+          searchInput.value = '';
+          resultCount.textContent = '';
         });
         booksContainer.appendChild(resultBox);
       });
-    }, 500); // 500ms delay to debounce
+    }, 500);
+  }
+
+  function buildSearchPattern(searchTerm) {
+    let pattern = searchTerm
+      .replace(/\*/g, '.*')  // '*' matches any number of characters
+      .replace(/\?/g, '.')   // '?' matches exactly one character
+      .replace(/[.*+?^=!:${}()|\[\]\/\\]/g, '\\$&'); // Escape regex special chars
+
+    return pattern;
   }
 
   function createBoxElement(text) {
